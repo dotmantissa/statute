@@ -40,7 +40,7 @@ class RegulatedConsumer(gl.contract.Contract):
             raise gl.vm.UserError(ERROR_EXPECTED + " Action has already been executed")
 
         # Query Statute contract
-        statute = gl.get_contract_at(self.statute_address)
+        statute = gl.contract.get_at(self.statute_address)
         is_compliant = statute.view().is_action_compliant(h)
 
         if not is_compliant:
