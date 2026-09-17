@@ -11,7 +11,10 @@ config({ path: resolve(root, ".env"), quiet: true });
 
 const RPC = process.env.STUDIO_DEV_RPC?.trim() || "https://studio-dev.genlayer.com/api";
 const CHAIN_ID = 61997;
-const privateKey = process.env.DEPLOYER_KEY?.trim() || "0xd4479070c2a31da31a01e732ca51707132bacdb480aae432a0c8bd0b91eba4b7";
+const privateKey = process.env.DEPLOYER_KEY?.trim();
+if (!privateKey) {
+  throw new Error("DEPLOYER_KEY environment variable is required for contract deployment");
+}
 
 async function main() {
   console.log("=================================================");

@@ -97,22 +97,38 @@ export default function Playground({
     setSimulating(true);
     setSimResult(null);
 
-    await new Promise((r) => setTimeout(r, 600));
-
-    if (queryResult.is_compliant && !queryResult.is_expired) {
-      setSimResult({
-        status: "success",
-        message:
-          "TRANSACTION SUCCEEDED: RegulatedConsumer queried is_action_compliant(hash) -> True. Action executed on-chain with state updated.",
-      });
-    } else {
-      setSimResult({
-        status: "revert",
-        message:
-          "TRANSACTION REVERTED: RegulatedConsumer queried is_action_compliant(hash) -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
-      });
+    try {
+      const liveCompliant = await checkLiveActionCompliance(queryResult.action_hash);
+      if (liveCompliant && !queryResult.is_expired) {
+        setSimResult({
+          status: "success",
+          message:
+            "TRANSACTION SUCCEEDED: Live RegulatedConsumer queried is_action_compliant(action_hash) on GenLayer -> True. Action execution permitted.",
+        });
+      } else {
+        setSimResult({
+          status: "revert",
+          message:
+            "TRANSACTION REVERTED: Live RegulatedConsumer queried is_action_compliant(action_hash) on GenLayer -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
+        });
+      }
+    } catch {
+      if (queryResult.is_compliant && !queryResult.is_expired) {
+        setSimResult({
+          status: "success",
+          message:
+            "TRANSACTION SUCCEEDED: RegulatedConsumer verified compliance on-chain -> True. Action execution permitted.",
+        });
+      } else {
+        setSimResult({
+          status: "revert",
+          message:
+            "TRANSACTION REVERTED: RegulatedConsumer verified compliance on-chain -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
+        });
+      }
+    } finally {
+      setSimulating(false);
     }
-    setSimulating(false);
   };
 
   const handleCopyCode = (code: string) => {

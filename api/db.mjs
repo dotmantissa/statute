@@ -6,8 +6,17 @@ config({ path: ".env" });
 
 const execFileAsync = promisify(execFile);
 
-const NEON_CONNECTION_STRING = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_pw9USPND3EHx@ep-summer-bird-b4chu7bj-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-const NEON_SQL_URL = "https://ep-summer-bird-b4chu7bj-pooler.c-6.us-east-2.aws.neon.tech/sql";
+const NEON_CONNECTION_STRING = process.env.DATABASE_URL || "";
+function getNeonSqlUrl() {
+  if (!NEON_CONNECTION_STRING) return "";
+  try {
+    const parsed = new URL(NEON_CONNECTION_STRING);
+    return `https://${parsed.hostname}/sql`;
+  } catch {
+    return "";
+  }
+}
+const NEON_SQL_URL = process.env.NEON_SQL_URL || getNeonSqlUrl();
 
 /**
  * Execute parameterized query against Neon PostgreSQL over HTTPS.

@@ -16,7 +16,10 @@ config({ path: resolve(root, ".env"), quiet: true });
 const PORT = parseInt(process.env.PORT || "4001", 10);
 const RPC = process.env.STUDIO_DEV_RPC?.trim() || "https://studio-dev.genlayer.com/api";
 const CHAIN_ID = 61997;
-const privateKey = process.env.DEPLOYER_KEY?.trim() || "0xd4479070c2a31da31a01e732ca51707132bacdb480aae432a0c8bd0b91eba4b7";
+const privateKey = process.env.DEPLOYER_KEY?.trim();
+if (!privateKey) {
+  console.warn("Notice: DEPLOYER_KEY is not defined in environment");
+}
 
 let deploymentAddresses = {};
 try {
@@ -30,21 +33,23 @@ const STATUTE_ADDRESS = deploymentAddresses?.contracts?.StatuteAdjudicator?.addr
 const CONSUMER_ADDRESS = deploymentAddresses?.contracts?.RegulatedConsumer?.address || "0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10";
 
 // Initialize Relayer Account and GenLayer Client
-const relayerAccount = createAccount(privateKey);
+const relayerAccount = privateKey ? createAccount(privateKey) : null;
 const genlayerClient = createClient({
   chain: studioDevnet,
   endpoint: RPC,
-  account: relayerAccount,
+  ...(relayerAccount ? { account: relayerAccount } : {}),
 });
 
 // Initialize Privy Client for email auth verification
 const privyAppId = process.env.PRIVY_APP_ID || "cmu3xw9hq003b0cjmpt2ibr7f";
-const privyAppSecret = process.env.PRIVY_APP_SECRET || "privy_app_secret_4k4tXwyAZN5uoRSWJRAmHVRsi9XwcRphQZ7ofNFEU7bWDH8UJSdFLkwrfPLhGNSEzeJfPpdwVxZ9y5ntT1xCdzys";
+const privyAppSecret = process.env.PRIVY_APP_SECRET;
 let privy;
-try {
-  privy = new PrivyClient(privyAppId, privyAppSecret);
-} catch (e) {
-  console.warn("Privy client initialization notice:", e.message);
+if (privyAppId && privyAppSecret) {
+  try {
+    privy = new PrivyClient(privyAppId, privyAppSecret);
+  } catch (e) {
+    console.warn("Privy client initialization notice:", e.message);
+  }
 }
 
 const app = express();

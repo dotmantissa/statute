@@ -174,7 +174,7 @@ cd statute
 npm install
 ```
 
-3. Install web front-end dependencies:
+3. Install web frontend dependencies:
 ```bash
 pnpm --prefix web install
 ```
@@ -183,8 +183,8 @@ pnpm --prefix web install
 ```bash
 STUDIO_DEV_RPC=https://studio-dev.genlayer.com/api
 STUDIO_CHAIN_ID=61997
-DEPLOYER_KEY=0xd4479070c2a31da31a01e732ca51707132bacdb480aae432a0c8bd0b91eba4b7
-DATABASE_URL=postgresql://neondb_owner:npg_u3d1wSrkRjWJ@ep-summer-bird-b4chu7bj-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require
+DEPLOYER_KEY=0x...
+DATABASE_URL=postgresql://...
 PRIVY_APP_ID=cmu3xw9hq003b0cjmpt2ibr7f
 PORT=4001
 ```

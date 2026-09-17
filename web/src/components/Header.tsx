@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Logo from "./Logo";
 import { useTheme } from "../app/providers";
 import { usePrivy } from "@privy-io/react-auth";
-import { Sun, Moon, Mail, LogOut, CheckCircle2, Shield, Activity, Menu, X, ExternalLink } from "lucide-react";
+import { Sun, Moon, Mail, LogOut, CheckCircle2, Shield, Menu, X } from "lucide-react";
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -29,17 +29,6 @@ export default function Header() {
           <a href="#" className="flex items-center focus:outline-none">
             <Logo size={42} showText={true} />
           </a>
-
-          <div className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium border bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-[#b0d2e8]">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#26ccf0] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#26ccf0]"></span>
-            </span>
-            <span>GenLayer Studio Network</span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#26ccf0]/15 text-[#26ccf0]">
-              61997
-            </span>
-          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -141,12 +130,6 @@ export default function Header() {
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden px-4 pt-2 pb-6 border-b bg-white border-[#d2e4f0] dark:bg-[#001525] dark:border-[#003d66] space-y-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border bg-[#f5f9fc] border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
-            <span className="h-2 w-2 rounded-full bg-[#26ccf0]"></span>
-            <span className="text-[#002139] dark:text-[#b0d2e8]">GenLayer Studio Network</span>
-            <span className="ml-auto font-mono text-[#26ccf0] font-bold">Chain 61997</span>
-          </div>
-
           <div className="grid grid-cols-2 gap-2 pt-2">
             <a
               href="#adjudicate"

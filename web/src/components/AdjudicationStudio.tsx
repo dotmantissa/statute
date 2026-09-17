@@ -65,7 +65,7 @@ const PRESET_SCENARIOS = [
     category: "Asset Referenced Token",
     rule: "Title III Art 36",
     actionId: "mica-art-reserve-pool-2026",
-    frameworkId: "mica-2023",
+    frameworkId: "mica-art16",
     actionTitle: "Liquidity Pool for Euro Backed Asset Referenced Token with Segregated Reserves",
     jurisdictions: ["EU"],
     description:
@@ -76,7 +76,7 @@ const PRESET_SCENARIOS = [
     category: "Digital Payment Token",
     rule: "Payment Services Act",
     actionId: "mas-dpt-institutional-vault",
-    frameworkId: "mas-dpt-2020",
+    frameworkId: "mas-dpt-act",
     actionTitle: "Institutional Custody and Lending Facility for Major Digital Payment Tokens",
     jurisdictions: ["SG"],
     description:
@@ -186,35 +186,10 @@ export default function AdjudicationStudio({
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
       clearTimeout(stepTimer3);
-
-      // Graceful fallback with direct on-chain hash computation
-      try {
-        const computedHash = await computeLiveActionHash(actionId, frameworkId, description);
-        const fallbackVerdict: AdjudicationResult = {
-          success: true,
-          txHash: "0x01d32bb1ea60c8f1da05c4c2454e919adf66c01546cd0ccd044cf703cfbee87b",
-          actionHash: computedHash,
-          verdictId: `vrd_${actionId.trim()}_${Math.floor(Date.now() / 1000)}`,
-          verdict: description.toLowerCase().includes("unregistered") || description.toLowerCase().includes("anonymous") ? "NON_COMPLIANT" : "COMPLIANT",
-          isCompliant: !(description.toLowerCase().includes("unregistered") || description.toLowerCase().includes("anonymous")),
-          isExpired: false,
-          expiresAt: Math.floor(Date.now() / 1000) + 2592000,
-          confidenceScore: 94,
-          applicableClauses: [`${frameworkId.toUpperCase()} Core Statutory Provisions`],
-          conditions: ["Mandatory accredited investor credentials verified before settlement"],
-          reasoning: `Evaluated against ${frameworkId}. Proposed action complies with registered statutory guidelines.`,
-          riskFactors: ["Requires ongoing compliance attestations"],
-          frameworkId,
-        };
-        setResult(fallbackVerdict);
-        setStepIndex(5);
-        if (onVerdictCreated) {
-          onVerdictCreated(fallbackVerdict);
-        }
-      } catch {
-        setErrorMessage(err.message || "An unexpected error occurred during adjudication.");
-        setStepIndex(0);
-      }
+      setErrorMessage(
+        err.message || "Failed to complete adjudication with GenLayer validators. Please try again."
+      );
+      setStepIndex(0);
     } finally {
       setLoading(false);
     }
@@ -352,9 +327,9 @@ export default function AdjudicationStudio({
                           ))
                         ) : (
                           <>
-                            <option value="sec-reg-d">SEC Regulation D (Rules 504, 506b, 506c)</option>
-                            <option value="mica-2023">EU Markets in Crypto Assets Regulation (MiCA)</option>
-                            <option value="mas-dpt-2020">MAS Digital Payment Token Regulatory Guidance</option>
+                            <option value="sec-reg-d">SEC Regulation D Rule 506(c) (sec-reg-d)</option>
+                            <option value="mica-art16">EU MiCA Public Offering Framework (mica-art16)</option>
+                            <option value="mas-dpt-act">MAS Digital Payment Token Services (mas-dpt-act)</option>
                           </>
                         )}
                       </select>
@@ -661,7 +636,7 @@ export default function AdjudicationStudio({
                   <p className="text-xs leading-relaxed text-[#3b5a70] dark:text-[#b0d2e8] mb-6">
                     Unlike standard EVM contracts that only execute deterministic arithmetic,
                     Statute operates on GenLayer to fetch primary statutory documents from the web,
-                    execute AI compliance reasoning, and reach multi-validator consensus.
+                    execute AI compliance reasoning, and reach validator consensus.
                   </p>
 
                   <div className="space-y-4 text-xs">

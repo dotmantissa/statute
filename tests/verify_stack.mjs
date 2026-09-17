@@ -49,7 +49,7 @@ async function runVerification() {
   const dbFrameworks = await query("SELECT COUNT(*) as count FROM statute_frameworks;");
   console.log(`   Neon DB Frameworks Synced: ${dbFrameworks.rows[0].count}`);
 
-  console.log("\n✓ ALL STACK COMPONENTS VERIFIED SUCCESSFULLY!\n");
+  console.log("\n[OK] ALL STACK COMPONENTS VERIFIED SUCCESSFULLY!\n");
 }
 
 runVerification().catch((err) => {
