@@ -1,0 +1,32 @@
+{
+  "name": "statute",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api:start": "node api/server.mjs",
+    "api:dev": "node --watch api/server.mjs",
+    "lint:contracts": ".venv/bin/python scripts/contract-toolchain.py check",
+    "test:contracts": ".venv/bin/python scripts/contract-toolchain.py test tests/direct -v",
+    "test": "npm run test:contracts",
+    "deploy:studio": "node deploy/deploy.mjs",
+    "typecheck": "npm --prefix web run typecheck",
+    "build:web": "npm --prefix web run build",
+    "lint": "npm run lint:contracts && npm --prefix web run lint",
+    "dev": "concurrently \"npm run api:start\" \"npm --prefix web run dev\""
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@privy-io/node": "^0.34.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^4.21.2",
+    "genlayer-js": "2.0.0-rc.1",
+    "json-bigint": "^1.0.0",
+    "pg": "^8.13.3",
+    "viem": "^2.56.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
