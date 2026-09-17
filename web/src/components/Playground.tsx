@@ -14,7 +14,10 @@ import {
   Terminal,
   Shield,
   Layers,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
+import { queryLiveVerdictStatus, checkLiveActionCompliance } from "../lib/genlayerClient";
 
 interface PlaygroundProps {
   selectedHash?: string;
@@ -32,44 +35,85 @@ export default function Playground({
   const [queryResult, setQueryResult] = useState<any>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
 
+  // Simulation state
+  const [simulating, setSimulating] = useState(false);
+  const [simResult, setSimResult] = useState<{
+    status: "success" | "revert";
+    message: string;
+  } | null>(null);
+
   const [activeCodeTab, setActiveCodeTab] = useState<"solidity" | "python" | "typescript">("solidity");
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
 
-  const handleExecuteQuery = React.useCallback(async (hashToQuery?: string) => {
-    const target = (hashToQuery || queryHash).trim();
-    if (!target) {
-      setQueryError("Please enter an action hash to query.");
-      return;
-    }
-
-    setLoading(true);
-    setQueryError(null);
-    setQueryResult(null);
-
-    try {
-      const res = await fetch(`/api/verdict/${encodeURIComponent(target)}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to query verdict.");
+  const handleExecuteQuery = React.useCallback(
+    async (hashToQuery?: string) => {
+      const target = (hashToQuery || queryHash).trim();
+      if (!target) {
+        setQueryError("Please enter an action hash to query.");
+        return;
       }
 
-      setQueryResult(data.status);
-    } catch (err: any) {
-      setQueryError(err.message || "Failed to execute contract read query.");
-    } finally {
-      setLoading(false);
-    }
-  }, [queryHash]);
+      setLoading(true);
+      setQueryError(null);
+      setQueryResult(null);
+      setSimResult(null);
 
-  // Update when parent passes a new hash
+      try {
+        const res = await fetch(`/api/verdict/${encodeURIComponent(target)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status) {
+            setQueryResult(data.status);
+            return;
+          }
+        }
+        // Fallback directly to live GenLayer Studio contract
+        const status = await queryLiveVerdictStatus(target);
+        setQueryResult(status);
+      } catch {
+        try {
+          const status = await queryLiveVerdictStatus(target);
+          setQueryResult(status);
+        } catch (directErr: any) {
+          setQueryError(directErr.message || "Failed to execute contract read query.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [queryHash]
+  );
+
   React.useEffect(() => {
     if (selectedHash) {
       setQueryHash(selectedHash);
       handleExecuteQuery(selectedHash);
     }
   }, [selectedHash, handleExecuteQuery]);
+
+  const handleSimulateConsumer = async () => {
+    if (!queryResult) return;
+    setSimulating(true);
+    setSimResult(null);
+
+    await new Promise((r) => setTimeout(r, 600));
+
+    if (queryResult.is_compliant && !queryResult.is_expired) {
+      setSimResult({
+        status: "success",
+        message:
+          "TRANSACTION SUCCEEDED: RegulatedConsumer queried is_action_compliant(hash) -> True. Action executed on-chain with state updated.",
+      });
+    } else {
+      setSimResult({
+        status: "revert",
+        message:
+          "TRANSACTION REVERTED: RegulatedConsumer queried is_action_compliant(hash) -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
+      });
+    }
+    setSimulating(false);
+  };
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -171,7 +215,7 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
   };
 
   return (
-    <section id="playground" className="py-12 scroll-mt-20">
+    <section id="playground" className="py-16 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
@@ -179,19 +223,19 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
               <FileCode2 className="w-4 h-4" />
               <span>Smart Contract Playground</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 text-[#002139] dark:text-white">
+            <h2 className="text-3xl font-bold tracking-tight mt-1.5 text-[#002139] dark:text-white">
               On-chain Gating and Verification
             </h2>
-            <p className="text-sm mt-1 text-[#3b5a70] dark:text-[#b0d2e8]">
+            <p className="text-sm mt-1.5 text-[#3b5a70] dark:text-[#b0d2e8]">
               Test any action hash directly against the deployed GenLayer contract or integrate
               compliance gating directly into your decentralized protocol.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 p-2 rounded-xl border text-xs font-mono bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-white">
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-mono bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-white">
               <span className="text-[#6b8699] dark:text-[#719bb5]">Statute:</span>
-              <span className="text-[#26ccf0] truncate max-w-[120px] sm:max-w-[160px]">
+              <span className="text-[#26ccf0] font-semibold truncate max-w-[130px] sm:max-w-[170px]">
                 {statuteAddress}
               </span>
               <button
@@ -210,9 +254,9 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Query Tester Card */}
+          {/* Query Tester Column */}
           <div className="lg:col-span-5">
-            <div className="p-6 rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+            <div className="p-7 rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
               <div className="flex items-center gap-2 mb-4">
                 <Terminal className="w-4 h-4 text-[#26ccf0]" />
                 <h3 className="text-base font-bold text-[#002139] dark:text-white">
@@ -220,13 +264,13 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                 </h3>
               </div>
 
-              <p className="text-xs mb-4 text-[#3b5a70] dark:text-[#b0d2e8]">
-                Invokes <code className="px-1.5 py-0.5 rounded bg-[#26ccf0]/15 text-[#26ccf0] font-mono">is_action_compliant(hash)</code> on the live GenLayer network to verify if an action passes statutory compliance.
+              <p className="text-xs mb-5 text-[#3b5a70] dark:text-[#b0d2e8] leading-relaxed">
+                Invokes <code className="px-1.5 py-0.5 rounded bg-[#26ccf0]/15 text-[#26ccf0] font-mono font-semibold">is_action_compliant(hash)</code> on the live GenLayer network to verify if an action passes statutory compliance.
               </p>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1 text-[#3b5a70] dark:text-[#b0d2e8]">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 text-[#3b5a70] dark:text-[#b0d2e8]">
                     Target Action Hash
                   </label>
                   <input
@@ -234,7 +278,7 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                     value={queryHash}
                     onChange={(e) => setQueryHash(e.target.value)}
                     placeholder="e.g. 0x8f2d... or paste hash from feed above"
-                    className="w-full px-3 py-2.5 rounded-xl border text-xs font-mono outline-none focus:border-[#26ccf0] bg-[#f5f9fc] border-[#d2e4f0] text-[#002139] dark:bg-[#001e33] dark:border-[#003d66] dark:text-white"
+                    className="w-full px-4 py-3 rounded-xl border text-xs font-mono outline-none focus:border-[#26ccf0] bg-[#f5f9fc] border-[#d2e4f0] text-[#002139] dark:bg-[#001e33] dark:border-[#003d66] dark:text-white"
                   />
                 </div>
 
@@ -242,85 +286,110 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                   type="button"
                   disabled={loading}
                   onClick={() => handleExecuteQuery()}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs transition-all bg-[#26ccf0] text-[#002139] hover:bg-[#5ee1ff] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs transition-all bg-[#26ccf0] text-[#002139] hover:bg-[#5ee1ff] disabled:opacity-50"
                 >
                   <Play className={`w-3.5 h-3.5 fill-current ${loading ? "animate-pulse" : ""}`} />
-                  <span>{loading ? "Reading Contract..." : "Execute On-chain Query"}</span>
+                  <span>{loading ? "Querying GenLayer Blockchain..." : "Execute On-chain Query"}</span>
                 </button>
 
                 {queryError && (
-                  <div className="p-3 rounded-xl border flex items-center gap-2 text-xs bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400">
+                  <div className="p-3.5 rounded-xl border flex items-center gap-2 text-xs bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400">
                     <XCircle className="w-4 h-4 flex-shrink-0" />
                     <span>{queryError}</span>
                   </div>
                 )}
 
                 {queryResult && (
-                  <div className="p-4 rounded-xl border space-y-3 bg-[#f5f9fc] border-[#d2e4f0] dark:bg-[#001e33] dark:border-[#003d66]">
+                  <div className="p-5 rounded-xl border space-y-4 bg-[#f5f9fc] border-[#d2e4f0] dark:bg-[#001e33] dark:border-[#003d66]">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-[#6b8699] dark:text-[#719bb5]">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#6b8699] dark:text-[#719bb5]">
                         Verdict Outcome
                       </span>
                       {queryResult.verdict === "COMPLIANT" && (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 dark:text-emerald-400">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 dark:text-emerald-400">
                           COMPLIANT
                         </span>
                       )}
                       {queryResult.verdict === "CAUTION_WITH_CONDITIONS" && (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30 dark:text-amber-400">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30 dark:text-amber-400">
                           CAUTION
                         </span>
                       )}
                       {queryResult.verdict === "NON_COMPLIANT" && (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/15 text-rose-600 border border-rose-500/30 dark:text-rose-400">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-600 border border-rose-500/30 dark:text-rose-400">
                           NON COMPLIANT
                         </span>
                       )}
                       {!queryResult.exists && (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-500/15 text-gray-400 border border-gray-500/30">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-500/15 text-gray-400 border border-gray-500/30">
                           NOT FOUND
                         </span>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded-lg bg-white border border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
-                        <span className="text-[10px] text-[#6b8699] dark:text-[#719bb5] block">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-lg bg-white border border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+                        <span className="text-[10px] text-[#6b8699] dark:text-[#719bb5] uppercase font-bold block mb-1">
                           is_action_compliant
                         </span>
-                        <span className={`font-mono font-bold ${queryResult.is_compliant ? "text-emerald-500" : "text-rose-500"}`}>
+                        <span className={`font-mono font-bold text-sm ${queryResult.is_compliant ? "text-emerald-500" : "text-rose-500"}`}>
                           {queryResult.is_compliant ? "true" : "false"}
                         </span>
                       </div>
 
-                      <div className="p-2 rounded-lg bg-white border border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
-                        <span className="text-[10px] text-[#6b8699] dark:text-[#719bb5] block">
+                      <div className="p-3 rounded-lg bg-white border border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+                        <span className="text-[10px] text-[#6b8699] dark:text-[#719bb5] uppercase font-bold block mb-1">
                           is_expired
                         </span>
-                        <span className={`font-mono font-bold ${queryResult.is_expired ? "text-rose-500" : "text-emerald-500"}`}>
+                        <span className={`font-mono font-bold text-sm ${queryResult.is_expired ? "text-rose-500" : "text-emerald-500"}`}>
                           {queryResult.is_expired ? "true" : "false"}
                         </span>
                       </div>
                     </div>
 
-                    <div className="text-[11px] text-[#3b5a70] dark:text-[#b0d2e8]">
+                    <div className="text-xs text-[#3b5a70] dark:text-[#b0d2e8]">
                       Confidence: <strong>{queryResult.confidence_score}%</strong> &bull; Framework Version: <strong>{queryResult.framework_version || 1}</strong>
                     </div>
 
                     {queryResult.reasoning && (
-                      <div className="text-[11px] leading-relaxed p-2.5 rounded-lg border bg-white border-[#d2e4f0] text-[#3b5a70] dark:bg-[#002742] dark:border-[#003d66] dark:text-[#b0d2e8]">
+                      <div className="text-xs leading-relaxed p-3 rounded-lg border bg-white border-[#d2e4f0] text-[#3b5a70] dark:bg-[#002742] dark:border-[#003d66] dark:text-[#b0d2e8]">
                         {queryResult.reasoning}
                       </div>
                     )}
+
+                    {/* Consumer Gating Simulator */}
+                    <div className="pt-2 border-t border-[#d2e4f0] dark:border-[#003d66]">
+                      <button
+                        type="button"
+                        disabled={simulating}
+                        onClick={handleSimulateConsumer}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold border border-[#26ccf0]/50 text-[#26ccf0] hover:bg-[#26ccf0]/10 transition-all"
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                        <span>Simulate RegulatedConsumer Protocol Gate</span>
+                      </button>
+
+                      {simResult && (
+                        <div
+                          className={`mt-2 p-2.5 rounded-lg text-xs font-mono leading-relaxed border ${
+                            simResult.status === "success"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          {simResult.message}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Code Snippet Tabs */}
+          {/* Code Snippet Tabs Column */}
           <div className="lg:col-span-7">
-            <div className="p-6 rounded-2xl border flex flex-col h-full bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+            <div className="p-7 rounded-2xl border flex flex-col h-full bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
                 <div className="flex items-center gap-2">
                   <Code2 className="w-4 h-4 text-[#26ccf0]" />
@@ -333,7 +402,7 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                   <button
                     type="button"
                     onClick={() => setActiveCodeTab("solidity")}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeCodeTab === "solidity"
                         ? "bg-[#26ccf0] text-[#002139]"
                         : "text-[#6b8699] hover:text-white"
@@ -344,7 +413,7 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                   <button
                     type="button"
                     onClick={() => setActiveCodeTab("python")}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeCodeTab === "python"
                         ? "bg-[#26ccf0] text-[#002139]"
                         : "text-[#6b8699] hover:text-white"
@@ -355,7 +424,7 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                   <button
                     type="button"
                     onClick={() => setActiveCodeTab("typescript")}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeCodeTab === "typescript"
                         ? "bg-[#26ccf0] text-[#002139]"
                         : "text-[#6b8699] hover:text-white"
@@ -381,13 +450,13 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                 </button>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#d2e4f0] dark:border-[#003d66] flex items-center justify-between text-xs text-[#6b8699] dark:text-[#719bb5]">
+              <div className="mt-4 pt-3.5 border-t border-[#d2e4f0] dark:border-[#003d66] flex items-center justify-between text-xs text-[#6b8699] dark:text-[#719bb5]">
                 <span>GenLayer Studio Network &bull; RPC: https://studio-dev.genlayer.com/api</span>
                 <a
                   href="https://studio-dev.genlayer.com"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 text-[#26ccf0] hover:underline"
+                  className="flex items-center gap-1 text-[#26ccf0] hover:underline font-semibold"
                 >
                   <span>Network Status</span>
                   <ExternalLink className="w-3 h-3" />

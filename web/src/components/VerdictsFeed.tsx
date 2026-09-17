@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Scale,
   ExternalLink,
+  ArrowRight,
+  Filter,
 } from "lucide-react";
 
 export interface VerdictItem {
@@ -92,7 +94,7 @@ export default function VerdictsFeed({
   };
 
   return (
-    <section id="feed" className="py-12 scroll-mt-20">
+    <section id="feed" className="py-16 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
@@ -100,10 +102,10 @@ export default function VerdictsFeed({
               <Scale className="w-4 h-4" />
               <span>Public Adjudication Register</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 text-[#002139] dark:text-white">
+            <h2 className="text-3xl font-bold tracking-tight mt-1.5 text-[#002139] dark:text-white">
               Live Compliance Verdicts Feed
             </h2>
-            <p className="text-sm mt-1 text-[#3b5a70] dark:text-[#b0d2e8]">
+            <p className="text-sm mt-1.5 text-[#3b5a70] dark:text-[#b0d2e8]">
               Verified consensus rulings rendered by GenLayer validators. Cryptographically
               indexed on-chain and in PostgreSQL for rapid protocol discovery.
             </p>
@@ -113,7 +115,7 @@ export default function VerdictsFeed({
             type="button"
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-semibold transition-all bg-white border-[#d2e4f0] text-[#002139] hover:border-[#26ccf0] dark:bg-[#002742] dark:border-[#003d66] dark:text-white"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all bg-white border-[#d2e4f0] text-[#002139] hover:border-[#26ccf0] dark:bg-[#002742] dark:border-[#003d66] dark:text-white"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-[#26ccf0]" : ""}`} />
             <span>Refresh Feed</span>
@@ -121,15 +123,15 @@ export default function VerdictsFeed({
         </div>
 
         {/* Controls: Search & Filter Tabs */}
-        <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
-          <div className="relative w-full sm:w-80">
+        <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+          <div className="relative w-full sm:w-88">
             <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#6b8699]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by title, ID, or framework..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border text-xs outline-none transition-all focus:border-[#26ccf0] bg-[#f5f9fc] border-[#d2e4f0] text-[#002139] dark:bg-[#001e33] dark:border-[#003d66] dark:text-white"
+              placeholder="Search by action title, ID, or framework..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border text-xs outline-none transition-all focus:border-[#26ccf0] bg-[#f5f9fc] border-[#d2e4f0] text-[#002139] dark:bg-[#001e33] dark:border-[#003d66] dark:text-white"
             />
           </div>
 
@@ -150,9 +152,9 @@ export default function VerdictsFeed({
                   key={status}
                   type="button"
                   onClick={() => setFilter(status)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
-                      ? "bg-[#26ccf0] text-[#002139]"
+                      ? "bg-[#26ccf0] text-[#002139] shadow-sm"
                       : "bg-[#f5f9fc] text-[#3b5a70] border border-[#d2e4f0] hover:border-[#26ccf0] dark:bg-[#001e33] dark:border-[#003d66] dark:text-[#b0d2e8]"
                   }`}
                 >
@@ -165,14 +167,14 @@ export default function VerdictsFeed({
 
         {/* Verdicts List */}
         {loading && verdicts.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-[#26ccf0] mb-3" />
-            <p className="text-sm font-semibold text-[#002139] dark:text-white">
+          <div className="p-16 text-center rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+            <RefreshCw className="w-9 h-9 animate-spin mx-auto text-[#26ccf0] mb-3" />
+            <p className="text-sm font-bold text-[#002139] dark:text-white">
               Loading consensus verdicts from GenLayer...
             </p>
           </div>
         ) : filteredVerdicts.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
+          <div className="p-16 text-center rounded-2xl border bg-white border-[#d2e4f0] dark:bg-[#002742] dark:border-[#003d66]">
             <Scale className="w-10 h-10 mx-auto text-[#6b8699] mb-3" />
             <h3 className="text-base font-bold text-[#002139] dark:text-white">
               No matching verdicts found
@@ -190,35 +192,35 @@ export default function VerdictsFeed({
               return (
                 <div
                   key={item.verdict_id}
-                  className="rounded-2xl border transition-all overflow-hidden bg-white border-[#d2e4f0] hover:border-[#26ccf0]/50 dark:bg-[#002742] dark:border-[#003d66]"
+                  className="rounded-2xl border transition-all overflow-hidden bg-white border-[#d2e4f0] hover:border-[#26ccf0]/50 hover:shadow-sm dark:bg-[#002742] dark:border-[#003d66]"
                 >
                   {/* Summary Bar */}
                   <div
                     onClick={() => toggleExpand(item.verdict_id)}
-                    className="p-5 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className="p-6 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-5"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-1 flex-shrink-0">
                         {item.verdict === "COMPLIANT" && (
-                          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
-                            <ShieldCheck className="w-5 h-5" />
+                          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
+                            <ShieldCheck className="w-6 h-6" />
                           </div>
                         )}
                         {item.verdict === "CAUTION_WITH_CONDITIONS" && (
-                          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
-                            <AlertTriangle className="w-5 h-5" />
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
+                            <AlertTriangle className="w-6 h-6" />
                           </div>
                         )}
                         {item.verdict === "NON_COMPLIANT" && (
-                          <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500">
-                            <XCircle className="w-5 h-5" />
+                          <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500">
+                            <XCircle className="w-6 h-6" />
                           </div>
                         )}
                       </div>
 
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-[#26ccf0]/15 text-[#002139] dark:text-[#26ccf0]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-[#26ccf0]/15 text-[#002139] dark:text-[#26ccf0]">
                             {item.framework_id.toUpperCase()}
                           </span>
 
@@ -227,7 +229,7 @@ export default function VerdictsFeed({
                           </span>
                         </div>
 
-                        <h3 className="text-base font-bold text-[#002139] dark:text-white">
+                        <h3 className="text-base font-bold text-[#002139] dark:text-white leading-snug">
                           {item.action_title || item.action_id}
                         </h3>
 
@@ -239,7 +241,7 @@ export default function VerdictsFeed({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 self-end md:self-center">
+                    <div className="flex flex-wrap items-center gap-3.5 self-end md:self-center flex-shrink-0">
                       {/* Verdict Badge */}
                       <div className="text-right">
                         {item.verdict === "COMPLIANT" && (
@@ -259,17 +261,17 @@ export default function VerdictsFeed({
                         )}
 
                         <div className="text-[11px] mt-1 font-mono text-[#6b8699] dark:text-[#719bb5]">
-                          Confidence: {item.confidence_score}%
+                          Confidence: <strong>{item.confidence_score}%</strong>
                         </div>
                       </div>
 
                       {/* Expiry Pill */}
-                      <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border bg-[#f5f9fc] border-[#d2e4f0] text-[#3b5a70] dark:bg-[#001e33] dark:border-[#003d66] dark:text-[#b0d2e8]">
+                      <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border bg-[#f5f9fc] border-[#d2e4f0] text-[#3b5a70] dark:bg-[#001e33] dark:border-[#003d66] dark:text-[#b0d2e8]">
                         <Clock className="w-3.5 h-3.5 text-[#26ccf0]" />
                         <span>{formatExpiry(item.expires_at, isExpired)}</span>
                       </div>
 
-                      <div className="text-[#6b8699] dark:text-[#719bb5]">
+                      <div className="text-[#6b8699] dark:text-[#719bb5] p-1">
                         {isExpanded ? (
                           <ChevronUp className="w-5 h-5" />
                         ) : (
@@ -281,11 +283,11 @@ export default function VerdictsFeed({
 
                   {/* Expanded Details Drawer */}
                   {isExpanded && (
-                    <div className="p-5 border-t bg-[#f5f9fc]/50 border-[#d2e4f0] dark:bg-[#001e33]/50 dark:border-[#003d66]">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                    <div className="p-6 border-t bg-[#f5f9fc]/50 border-[#d2e4f0] dark:bg-[#001e33]/50 dark:border-[#003d66]">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         {/* Reasoning */}
                         <div>
-                          <h4 className="text-xs font-semibold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
+                          <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
                             Validator Consensus Reasoning
                           </h4>
                           <p className="text-xs leading-relaxed text-[#3b5a70] dark:text-[#b0d2e8]">
@@ -297,12 +299,12 @@ export default function VerdictsFeed({
                         <div>
                           {item.conditions && item.conditions.length > 0 ? (
                             <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider mb-2 text-amber-500">
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-amber-500">
                                 Required Compliance Conditions
                               </h4>
-                              <ul className="space-y-1">
+                              <ul className="space-y-1.5">
                                 {item.conditions.map((cond, i) => (
-                                  <li key={i} className="text-xs flex items-start gap-1.5 text-[#3b5a70] dark:text-[#b0d2e8]">
+                                  <li key={i} className="text-xs flex items-start gap-2 text-[#3b5a70] dark:text-[#b0d2e8]">
                                     <span className="text-amber-500 mt-0.5">&bull;</span>
                                     <span>{cond}</span>
                                   </li>
@@ -311,12 +313,12 @@ export default function VerdictsFeed({
                             </div>
                           ) : item.risk_factors && item.risk_factors.length > 0 ? (
                             <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider mb-2 text-rose-500">
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-rose-500">
                                 Identified Risk Factors
                               </h4>
-                              <ul className="space-y-1">
+                              <ul className="space-y-1.5">
                                 {item.risk_factors.map((risk, i) => (
-                                  <li key={i} className="text-xs flex items-start gap-1.5 text-[#3b5a70] dark:text-[#b0d2e8]">
+                                  <li key={i} className="text-xs flex items-start gap-2 text-[#3b5a70] dark:text-[#b0d2e8]">
                                     <span className="text-rose-500 mt-0.5">&bull;</span>
                                     <span>{risk}</span>
                                   </li>
@@ -325,7 +327,7 @@ export default function VerdictsFeed({
                             </div>
                           ) : (
                             <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
                                 Compliance Scope
                               </h4>
                               <p className="text-xs text-[#6b8699] dark:text-[#719bb5]">
@@ -338,15 +340,15 @@ export default function VerdictsFeed({
 
                       {/* Applicable Clauses */}
                       {item.applicable_clauses && item.applicable_clauses.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="text-xs font-semibold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
+                        <div className="mb-5">
+                          <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-[#3b5a70] dark:text-[#b0d2e8]">
                             Referenced Legal Clauses
                           </h4>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-2">
                             {item.applicable_clauses.map((clause, i) => (
                               <span
                                 key={i}
-                                className="text-[11px] font-mono px-2.5 py-1 rounded-lg border bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-[#26ccf0]"
+                                className="text-[11px] font-mono px-3 py-1 rounded-lg border bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-[#26ccf0]"
                               >
                                 {clause}
                               </span>
@@ -361,7 +363,7 @@ export default function VerdictsFeed({
                           <span className="text-xs font-mono font-medium text-[#6b8699] dark:text-[#719bb5]">
                             Action Hash:
                           </span>
-                          <span className="text-xs font-mono text-[#002139] dark:text-[#26ccf0] truncate max-w-[200px] sm:max-w-[320px]">
+                          <span className="text-xs font-mono text-[#002139] dark:text-[#26ccf0] truncate max-w-[200px] sm:max-w-[340px]">
                             {item.action_hash}
                           </span>
                           <button
@@ -383,9 +385,10 @@ export default function VerdictsFeed({
                             <button
                               type="button"
                               onClick={() => onSelectActionHash(item.action_hash)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-semibold border bg-white border-[#d2e4f0] text-[#002139] hover:border-[#26ccf0] dark:bg-[#002742] dark:border-[#003d66] dark:text-white"
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold border bg-white border-[#d2e4f0] text-[#002139] hover:border-[#26ccf0] dark:bg-[#002742] dark:border-[#003d66] dark:text-white"
                             >
-                              Test in Playground
+                              <span>Test in Playground</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-[#26ccf0]" />
                             </button>
                           )}
 

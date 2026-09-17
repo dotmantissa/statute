@@ -8,11 +8,12 @@ import VerdictsFeed, { VerdictItem } from "../components/VerdictsFeed";
 import FrameworkRegistry, { FrameworkData } from "../components/FrameworkRegistry";
 import Playground from "../components/Playground";
 import Footer from "../components/Footer";
-
-const STATUTE_ADDRESS =
-  process.env.NEXT_PUBLIC_STATUTE_ADDRESS || "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e";
-const CONSUMER_ADDRESS =
-  process.env.NEXT_PUBLIC_CONSUMER_ADDRESS || "0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10";
+import {
+  STATUTE_ADDRESS,
+  CONSUMER_ADDRESS,
+  fetchLiveFrameworks,
+  fetchLiveVerdicts,
+} from "../lib/genlayerClient";
 
 const DEFAULT_FRAMEWORKS: FrameworkData[] = [
   {
@@ -41,7 +42,9 @@ const DEFAULT_FRAMEWORKS: FrameworkData[] = [
     issuing_authority: "Monetary Authority of Singapore",
     description:
       "Statutory guidelines for digital payment token services, custody segregation, consumer protection, and technology risk management.",
-    document_urls: ["https://www.mas.gov.sg/regulation/guidelines/guidelines-on-provision-of-digital-payment-token-services-to-the-public"],
+    document_urls: [
+      "https://www.mas.gov.sg/regulation/guidelines/guidelines-on-provision-of-digital-payment-token-services-to-the-public",
+    ],
     jurisdictions: ["SG"],
     verdict_validity_seconds: 2592000,
   },
@@ -132,10 +135,20 @@ export default function HomePage() {
         const data = await res.json();
         if (data.frameworks && data.frameworks.length > 0) {
           setFrameworks(data.frameworks);
+          return;
         }
       }
     } catch {
-      // Use defaults if backend unavailable
+      // Backend not reached, fall back to direct on-chain query
+    }
+
+    try {
+      const onChain = await fetchLiveFrameworks();
+      if (onChain && onChain.length > 0) {
+        setFrameworks(onChain as unknown as FrameworkData[]);
+      }
+    } catch {
+      // Use defaults
     }
   };
 
@@ -147,7 +160,18 @@ export default function HomePage() {
         const data = await res.json();
         if (data.verdicts && data.verdicts.length > 0) {
           setVerdicts(data.verdicts);
+          setLoadingVerdicts(false);
+          return;
         }
+      }
+    } catch {
+      // Backend not reached, fall back to direct on-chain query
+    }
+
+    try {
+      const onChain = await fetchLiveVerdicts(30);
+      if (onChain && onChain.length > 0) {
+        setVerdicts(onChain as unknown as VerdictItem[]);
       }
     } catch {
       // Use defaults
@@ -215,6 +239,7 @@ export default function HomePage() {
         <AdjudicationStudio
           frameworks={frameworks}
           onVerdictCreated={handleVerdictCreated}
+          onVerifyInPlayground={handleSelectActionHash}
         />
 
         <VerdictsFeed
