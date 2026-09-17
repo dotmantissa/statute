@@ -89,6 +89,10 @@ Deployment transaction hash:
 - StatuteAdjudicator: `0x01d32bb1ea60c8f1da05c4c2454e919adf66c01546cd0ccd044cf703cfbee87b`
 - RegulatedConsumer: `0xc93e02e967712402c04f7a7d9675860698a58bdc4b048a4bc54b87bec41e4904`
 
+Live Production Application:
+- Production dApp: [https://statute-protocol.vercel.app](https://statute-protocol.vercel.app)
+- Protocol Alias: [https://statute-adjudicator.vercel.app](https://statute-adjudicator.vercel.app)
+
 ---
 
 ## Key Features
