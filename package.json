@@ -8,7 +8,7 @@
     "api:dev": "node --watch api/server.mjs",
     "lint:contracts": ".venv/bin/python scripts/contract-toolchain.py check",
     "test:contracts": ".venv/bin/python scripts/contract-toolchain.py test tests/direct -v",
-    "test": "npm run test:contracts",
+    "test": "npm run test:contracts && npm run typecheck",
     "deploy:studio": "node deploy/deploy.mjs",
     "typecheck": "npm --prefix web run typecheck",
     "build:web": "npm --prefix web run build",

@@ -36,15 +36,7 @@ export default function Playground({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
 
-  // Update when parent passes a new hash
-  React.useEffect(() => {
-    if (selectedHash) {
-      setQueryHash(selectedHash);
-      handleExecuteQuery(selectedHash);
-    }
-  }, [selectedHash]);
-
-  const handleExecuteQuery = async (hashToQuery?: string) => {
+  const handleExecuteQuery = React.useCallback(async (hashToQuery?: string) => {
     const target = (hashToQuery || queryHash).trim();
     if (!target) {
       setQueryError("Please enter an action hash to query.");
@@ -69,7 +61,15 @@ export default function Playground({
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryHash]);
+
+  // Update when parent passes a new hash
+  React.useEffect(() => {
+    if (selectedHash) {
+      setQueryHash(selectedHash);
+      handleExecuteQuery(selectedHash);
+    }
+  }, [selectedHash, handleExecuteQuery]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
