@@ -290,6 +290,7 @@ class StatuteAdjudicator(gl.contract.Contract):
         action_description: str,
         jurisdictions_json: str,
         action_metadata_json: str,
+        action_payload: str = "",
     ) -> str:
         fid = str(framework_id).strip().lower()
         fw_raw = self.frameworks.get(fid, "")
@@ -323,6 +324,15 @@ class StatuteAdjudicator(gl.contract.Contract):
                 metadata = {}
         except Exception:
             metadata = {}
+
+        # Exact payload resolution: prefer explicit payload, then metadata payload, fallback to description
+        effective_payload = str(action_payload).strip()
+        if not effective_payload:
+            if isinstance(metadata, dict) and "payload" in metadata:
+                effective_payload = str(metadata["payload"]).strip()
+            else:
+                effective_payload = desc
+        payload_hash = "0x" + hashlib.sha256(effective_payload.encode("utf-8")).hexdigest()
 
         action_hash = self._hash_action(act_id, fid, desc)
         doc_urls = framework.get("document_urls", [])
@@ -484,6 +494,8 @@ Return ONLY a JSON object with this exact schema:
             "action_hash": action_hash,
             "action_title": title,
             "action_description": desc,
+            "action_payload": effective_payload,
+            "payload_hash": payload_hash,
             "framework_id": fid,
             "framework_version": fw_version,
             "jurisdictions": target_jurisdictions,
@@ -576,6 +588,8 @@ Return ONLY a JSON object with this exact schema:
                 "adjudicated_at": 0,
                 "framework_id": "",
                 "framework_version": 0,
+                "action_payload": "",
+                "payload_hash": "",
                 "conditions": [],
                 "applicable_clauses": [],
                 "confidence_score": 0,
@@ -585,7 +599,13 @@ Return ONLY a JSON object with this exact schema:
 
         raw = self.verdicts.get(verdict_id, "")
         if not raw:
-            return {"exists": False, "action_hash": target_hash, "verdict": "UNADJUDICATED"}
+            return {
+                "exists": False,
+                "action_hash": target_hash,
+                "verdict": "UNADJUDICATED",
+                "action_payload": "",
+                "payload_hash": "",
+            }
 
         record = json.loads(raw)
         now_ts = int(self._now_epoch())
@@ -600,6 +620,9 @@ Return ONLY a JSON object with this exact schema:
             "action_hash": target_hash,
             "action_id": record.get("action_id", ""),
             "action_title": record.get("action_title", ""),
+            "action_description": record.get("action_description", ""),
+            "action_payload": record.get("action_payload", record.get("action_description", "")),
+            "payload_hash": record.get("payload_hash", ""),
             "verdict": verdict,
             "is_compliant": is_compliant,
             "is_expired": is_expired,
@@ -614,6 +637,47 @@ Return ONLY a JSON object with this exact schema:
             "risk_factors": record.get("risk_factors", []),
             "submitter": record.get("submitter", ""),
         }
+
+    @gl.public.view
+    def verify_action_payload(
+        self,
+        action_hash: str,
+        action_payload: str,
+        framework_version: u256 = u256(0),
+    ) -> bool:
+        """
+        Validates whether a compliant, unexpired verdict exists for action_hash
+        AND strictly matches the expected action_payload and optional framework version.
+        """
+        verdict_id = self.action_latest_verdict.get(str(action_hash).strip(), "")
+        if not verdict_id:
+            return False
+
+        raw = self.verdicts.get(verdict_id, "")
+        if not raw:
+            return False
+
+        record = json.loads(raw)
+        now_ts = int(self._now_epoch())
+        if now_ts > int(record.get("expires_at", 0)):
+            return False
+
+        if record.get("verdict") not in (VERDICT_COMPLIANT, VERDICT_CAUTION):
+            return False
+
+        if int(framework_version) > 0 and int(record.get("framework_version", 0)) != int(framework_version):
+            return False
+
+        clean_payload = str(action_payload).strip()
+        rec_payload = str(record.get("action_payload", record.get("action_description", ""))).strip()
+        rec_hash = str(record.get("payload_hash", "")).strip()
+        supplied_hash = "0x" + hashlib.sha256(clean_payload.encode("utf-8")).hexdigest()
+
+        return clean_payload == rec_payload or supplied_hash == rec_hash
+
+    @gl.public.view
+    def compute_payload_hash(self, action_payload: str) -> str:
+        return "0x" + hashlib.sha256(str(action_payload).strip().encode("utf-8")).hexdigest()
 
     @gl.public.view
     def get_verdict(self, verdict_id: str) -> dict:
