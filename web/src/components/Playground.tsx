@@ -37,6 +37,7 @@ export default function Playground({
 
   // Simulation state
   const [simulating, setSimulating] = useState(false);
+  const [simPayload, setSimPayload] = useState("");
   const [simResult, setSimResult] = useState<{
     status: "success" | "revert";
     message: string;
@@ -65,16 +66,19 @@ export default function Playground({
           const data = await res.json();
           if (data.status) {
             setQueryResult(data.status);
+            setSimPayload(data.status.action_payload || data.status.action_description || "");
             return;
           }
         }
         // Fallback directly to live GenLayer Studio contract
         const status = await queryLiveVerdictStatus(target);
         setQueryResult(status);
+        setSimPayload(status?.action_payload || status?.action_description || "");
       } catch {
         try {
           const status = await queryLiveVerdictStatus(target);
           setQueryResult(status);
+          setSimPayload(status?.action_payload || status?.action_description || "");
         } catch (directErr: any) {
           setQueryError(directErr.message || "Failed to execute contract read query.");
         }
@@ -92,40 +96,40 @@ export default function Playground({
     }
   }, [selectedHash, handleExecuteQuery]);
 
-  const handleSimulateConsumer = async () => {
+  const handleSimulateConsumer = async (overridePayload?: string) => {
     if (!queryResult) return;
     setSimulating(true);
     setSimResult(null);
 
+    const payloadToSend = overridePayload !== undefined ? overridePayload : simPayload;
+
     try {
-      const liveCompliant = await checkLiveActionCompliance(queryResult.action_hash);
-      if (liveCompliant && !queryResult.is_expired) {
+      const res = await fetch("/api/simulate-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionHash: queryResult.action_hash,
+          actionPayload: payloadToSend,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.simulation) {
         setSimResult({
-          status: "success",
-          message:
-            "TRANSACTION SUCCEEDED: Live RegulatedConsumer queried is_action_compliant(action_hash) on GenLayer -> True. Action execution permitted.",
+          status: data.simulation.status === "success" ? "success" : "revert",
+          message: data.simulation.message,
         });
-      } else {
-        setSimResult({
-          status: "revert",
-          message:
-            "TRANSACTION REVERTED: Live RegulatedConsumer queried is_action_compliant(action_hash) on GenLayer -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
-        });
-      }
-    } catch {
-      if (queryResult.is_compliant && !queryResult.is_expired) {
-        setSimResult({
-          status: "success",
-          message:
-            "TRANSACTION SUCCEEDED: RegulatedConsumer verified compliance on-chain -> True. Action execution permitted.",
-        });
-      } else {
+      } else if (data.error) {
         setSimResult({
           status: "revert",
-          message:
-            "TRANSACTION REVERTED: RegulatedConsumer verified compliance on-chain -> False. Execution halted: [EXPECTED] Regulatory compliance verification failed on Statute.",
+          message: `TRANSACTION REVERTED: RegulatedConsumer.execute_regulated_action failed: ${data.error}`,
         });
       }
+    } catch (err: any) {
+      setSimResult({
+        status: "revert",
+        message: `TRANSACTION REVERTED: RegulatedConsumer.execute_regulated_action call error: ${err.message}`,
+      });
     } finally {
       setSimulating(false);
     }
@@ -148,6 +152,11 @@ pragma solidity ^0.8.20;
 
 interface IStatuteAdjudicator {
     function is_action_compliant(string calldata actionHash) external view returns (bool);
+    function verify_action_payload(
+        string calldata actionHash,
+        string calldata actionPayload,
+        uint256 frameworkVersion
+    ) external view returns (bool);
     function get_verdict_status(string calldata actionHash) external view returns (
         bool exists,
         string memory verdict,
@@ -157,50 +166,87 @@ interface IStatuteAdjudicator {
     );
 }
 
+interface IRegulatedConsumer {
+    function execute_regulated_action(
+        string calldata actionHash,
+        string calldata actionPayload
+    ) external returns (bool);
+}
+
 contract RegulatedTokenVault {
     address public immutable statuteAdjudicator = ${statuteAddress};
+    address public immutable regulatedConsumer = ${consumerAddress};
+    uint256 public constant ACCEPTED_FRAMEWORK_VERSION = 1;
 
-    event ActionExecuted(string actionHash, address recipient, uint256 amount);
+    event ActionExecuted(string actionHash, string actionPayload);
 
-    function executeComplianceGatedTransfer(
+    function executeComplianceGatedAction(
         string calldata actionHash,
-        address payable recipient,
-        uint256 amount
+        string calldata actionPayload
     ) external {
-        // Enforce verified regulatory compliance before any capital transfer
-        require(
-            IStatuteAdjudicator(statuteAdjudicator).is_action_compliant(actionHash),
-            "Statute: Action is not verified compliant or verdict has expired"
+        // Enforce exact payload and framework version binding via RegulatedConsumer
+        bool permitted = IRegulatedConsumer(regulatedConsumer).execute_regulated_action(
+            actionHash,
+            actionPayload
         );
+        require(permitted, "Statute: Action payload or framework version rejected on-chain");
 
-        (bool success, ) = recipient.call{value: amount}("");
-        require(success, "Transfer failed");
-        emit ActionExecuted(actionHash, recipient, amount);
+        emit ActionExecuted(actionHash, actionPayload);
     }
 }`;
 
   const pythonCode = `# Intelligent Consumer Contract in Python for GenLayer
 from genlayer import *
+import hashlib
 
 @gl.contract
 class RegulatedAssetVault:
     statute_address: Address
-    owner: Address
+    accepted_framework_version: u256
+    total_executed: u256
+    config: gl.storage.TreeMap[str, str]
+    executed_actions: gl.storage.TreeMap[str, bool]
 
-    def __init__(self, statute_adjudicator: Address):
-        self.statute_address = statute_adjudicator
-        self.owner = gl.message.sender_account
+    def __init__(self, statute_adjudicator: Address, framework_id: str = "sec-reg-d", version: u256 = u256(1)):
+        self.statute_address = Address(str(statute_adjudicator))
+        self.accepted_framework_version = u256(int(version))
+        self.config["framework_id"] = str(framework_id).strip().lower()
+        self.total_executed = u256(0)
 
     @gl.public.write
-    def execute_regulated_offering(self, action_hash: str, recipient: Address, amount: u256) -> bool:
-        # Cross contract view call to StatuteAdjudicator
-        statute = gl.contract.get_at(self.statute_address)
-        is_compliant = statute.view().is_action_compliant(action_hash)
-        
-        if not is_compliant:
-            raise Exception("Statute: Action not compliant or adjudication has expired")
+    def execute_regulated_action(self, action_hash: str, action_payload: str) -> bool:
+        """
+        Executes a regulated action only if StatuteAdjudicator verifies compliance.
+        Binds verdict strictly to the exact payload and framework version accepted by this consumer.
+        Reverts if an unrelated payload attempts to reuse an approval.
+        """
+        h = str(action_hash).strip()
+        payload = str(action_payload).strip()
 
-        # Execute verified protocol logic on-chain
+        if self.executed_actions.get(h, False):
+            raise Exception("Statute: Action already executed")
+
+        # Query StatuteAdjudicator for authoritative verdict
+        statute = gl.contract.get_at(self.statute_address)
+        status = statute.view().get_verdict_status(h)
+
+        if not status.get("is_compliant", False) or status.get("is_expired", False):
+            raise Exception("Statute: Verdict not compliant or has expired")
+
+        # 1. Enforce exact framework version binding
+        if int(status.get("framework_version", 0)) != int(self.accepted_framework_version):
+            raise Exception("Statute: Framework version mismatch")
+
+        # 2. Enforce exact payload binding (unrelated payload cannot reuse approval)
+        record_payload = str(status.get("action_payload", status.get("action_description", ""))).strip()
+        record_payload_hash = str(status.get("payload_hash", "")).strip()
+        supplied_payload_hash = "0x" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+        if payload != record_payload and supplied_payload_hash != record_payload_hash:
+            raise Exception("Statute: Payload mismatch. Unrelated payload cannot reuse approval.")
+
+        self.executed_actions[h] = True
+        self.total_executed = u256(int(self.total_executed) + 1)
         return True
 `;
 
@@ -212,16 +258,21 @@ const client = createClient({
   endpoint: "https://studio-dev.genlayer.com/api",
 });
 
-const STATUTE_ADDRESS = "${statuteAddress}";
+const CONSUMER_ADDRESS = "${consumerAddress}";
 
-// Check if an action is certified compliant and currently unexpired
-export async function verifyActionCompliance(actionHash: string): Promise<boolean> {
-  const isCompliant = await client.readContract({
-    address: STATUTE_ADDRESS,
-    functionName: "is_action_compliant",
-    args: [actionHash],
+// Call execute_regulated_action with exact payload binding
+export async function executeRegulatedAction(
+  actionHash: string,
+  actionPayload: string
+): Promise<boolean> {
+  // Invokes execute_regulated_action on RegulatedConsumer
+  // Enforces exact payload match and framework version 1
+  const result = await client.simulateWriteContract({
+    address: CONSUMER_ADDRESS,
+    functionName: "execute_regulated_action",
+    args: [actionHash.trim(), actionPayload.trim()],
   });
-  return isCompliant;
+  return Boolean(result);
 }`;
 
   const getActiveCode = () => {
@@ -373,21 +424,71 @@ export async function verifyActionCompliance(actionHash: string): Promise<boolea
                       </div>
                     )}
 
-                    {/* Consumer Gating Simulator */}
-                    <div className="pt-2 border-t border-[#d2e4f0] dark:border-[#003d66]">
+                    {/* Advertised Consumer Gating Flow: execute_regulated_action */}
+                    <div className="pt-3 border-t border-[#d2e4f0] dark:border-[#003d66] space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#002139] dark:text-white flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5 text-[#26ccf0]" />
+                          <span>Consumer Flow: execute_regulated_action</span>
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#6b8699] dark:text-[#719bb5]">
+                          Action Payload to Execute
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={simPayload}
+                          onChange={(e) => setSimPayload(e.target.value)}
+                          placeholder="e.g. JSON action payload or transfer spec"
+                          className="w-full px-3 py-2 rounded-lg border text-xs font-mono outline-none focus:border-[#26ccf0] bg-white border-[#d2e4f0] text-[#002139] dark:bg-[#002742] dark:border-[#003d66] dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const approved = queryResult.action_payload || queryResult.action_description || "";
+                            setSimPayload(approved);
+                            handleSimulateConsumer(approved);
+                          }}
+                          className="flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-all text-center"
+                        >
+                          Test Approved Payload
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tampered = JSON.stringify({
+                              recipient: "0xAttackerVault666",
+                              amount: 100000000,
+                              action: "unauthorized_drain",
+                            });
+                            setSimPayload(tampered);
+                            handleSimulateConsumer(tampered);
+                          }}
+                          className="flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-all text-center"
+                        >
+                          Test Unrelated Payload
+                        </button>
+                      </div>
+
                       <button
                         type="button"
                         disabled={simulating}
-                        onClick={handleSimulateConsumer}
-                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold border border-[#26ccf0]/50 text-[#26ccf0] hover:bg-[#26ccf0]/10 transition-all"
+                        onClick={() => handleSimulateConsumer()}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold bg-[#26ccf0] text-[#002139] hover:bg-[#5ee1ff] disabled:opacity-50 transition-all"
                       >
                         <Shield className="w-3.5 h-3.5" />
-                        <span>Simulate RegulatedConsumer Protocol Gate</span>
+                        <span>{simulating ? "Executing on-chain..." : "Call execute_regulated_action"}</span>
                       </button>
 
                       {simResult && (
                         <div
-                          className={`mt-2 p-2.5 rounded-lg text-xs font-mono leading-relaxed border ${
+                          className={`p-3 rounded-lg text-xs font-mono leading-relaxed border ${
                             simResult.status === "success"
                               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                               : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"

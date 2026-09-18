@@ -115,7 +115,7 @@ export default function FrameworkRegistry({
     const validitySeconds = parseInt(regForm.validityDays, 10) * 86400;
 
     try {
-      const res = await fetch("/api/frameworks", {
+      const res = await fetch("/api/frameworks/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
