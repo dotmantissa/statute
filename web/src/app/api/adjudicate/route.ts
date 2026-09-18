@@ -4,8 +4,8 @@ import { studioDevnet } from "genlayer-js/chains";
 
 const RPC = process.env.STUDIO_DEV_RPC || "https://studio-dev.genlayer.com/api";
 const STATUTE_ADDRESS = (process.env.NEXT_PUBLIC_STATUTE_ADDRESS ||
-  "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e") as `0x${string}`;
-const privateKey = process.env.DEPLOYER_KEY;
+  "0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2") as `0x${string}`;
+const privateKey = process.env.DEPLOYER_KEY || "0xd4479070c2a31da31a01e732ca51707132bacdb480aae432a0c8bd0b91eba4b7";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       frameworkId,
       actionTitle,
       actionDescription,
+      actionPayload,
       jurisdictions,
       actionMetadata,
       userEmail,
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     const actId = actionId.trim();
     const title = (actionTitle || actId).trim();
     const desc = actionDescription.trim();
+    const actPayload = actionPayload ? String(actionPayload).trim() : desc;
     const jurisJson = JSON.stringify(jurisdictions || ["GLOBAL"]);
     const metaJson = JSON.stringify(actionMetadata || {});
 
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
     const txHash = await client.writeContract({
       address: STATUTE_ADDRESS,
       functionName: "adjudicate_action",
-      args: [actId, fid, title, desc, jurisJson, metaJson],
+      args: [actId, fid, title, desc, jurisJson, metaJson, actPayload],
       fees: {
         distribution: fees.distribution,
         messageAllocations: fees.messageAllocations,
@@ -124,6 +126,8 @@ export async function POST(req: NextRequest) {
       pending: false,
       txHash,
       actionHash: String(actionHash),
+      actionPayload: status.action_payload || actPayload,
+      payloadHash: status.payload_hash || "",
       verdictId: status.verdict_id,
       verdict: status.verdict,
       isCompliant: status.is_compliant,

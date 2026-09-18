@@ -2,10 +2,10 @@ import { createClient } from "genlayer-js";
 import { studioDevnet } from "genlayer-js/chains";
 
 export const STATUTE_ADDRESS = (process.env.NEXT_PUBLIC_STATUTE_ADDRESS ||
-  "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e") as `0x${string}`;
+  "0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2") as `0x${string}`;
 
 export const CONSUMER_ADDRESS = (process.env.NEXT_PUBLIC_CONSUMER_ADDRESS ||
-  "0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10") as `0x${string}`;
+  "0x6BC505692ebB58bAe3CaAE1B3a36054831C5d01f") as `0x${string}`;
 
 export const STUDIO_RPC_URL = "https://studio-dev.genlayer.com/api";
 export const STUDIO_CHAIN_ID = 61997;

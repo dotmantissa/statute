@@ -29,8 +29,8 @@ try {
   console.warn("No deploy/addresses.json found yet.");
 }
 
-const STATUTE_ADDRESS = deploymentAddresses?.contracts?.StatuteAdjudicator?.address || "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e";
-const CONSUMER_ADDRESS = deploymentAddresses?.contracts?.RegulatedConsumer?.address || "0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10";
+const STATUTE_ADDRESS = deploymentAddresses?.contracts?.StatuteAdjudicator?.address || "0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2";
+const CONSUMER_ADDRESS = deploymentAddresses?.contracts?.RegulatedConsumer?.address || "0x6BC505692ebB58bAe3CaAE1B3a36054831C5d01f";
 
 // Initialize Relayer Account and GenLayer Client
 const relayerAccount = privateKey ? createAccount(privateKey) : null;
@@ -145,7 +145,7 @@ app.get("/api/frameworks/:id", async (req, res) => {
   }
 });
 
-app.post("/api/frameworks", async (req, res) => {
+const handleRegisterFramework = async (req, res) => {
   try {
     const {
       frameworkId,
@@ -243,7 +243,10 @@ app.post("/api/frameworks", async (req, res) => {
     console.error("Framework registration error:", err);
     res.status(500).json({ error: err.message });
   }
-});
+};
+
+app.post("/api/frameworks", handleRegisterFramework);
+app.post("/api/frameworks/register", handleRegisterFramework);
 
 // ---------------------------------------------------------------------------
 // Adjudication Endpoints (Transaction Abstraction / Gasless Relayer)

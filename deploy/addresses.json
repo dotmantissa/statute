@@ -4,15 +4,15 @@
   "rpc": "https://studio-dev.genlayer.com/api",
   "explorer": "https://explorer-studio-dev.genlayer.com/",
   "deployer": "0xBC1399c55538eC034d4Da550C03c34Ae0C357f53",
-  "deployedAt": "2026-09-17T09:43:47.884Z",
+  "deployedAt": "2026-09-18T15:37:59.442Z",
   "contracts": {
     "StatuteAdjudicator": {
-      "address": "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e",
-      "deploymentTx": "0x01d32bb1ea60c8f1da05c4c2454e919adf66c01546cd0ccd044cf703cfbee87b"
+      "address": "0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2",
+      "deploymentTx": "0x7449acd885c681385a0aba58592e0d81b20e05a90f9b9543b2e306235e3e6e81"
     },
     "RegulatedConsumer": {
-      "address": "0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10",
-      "deploymentTx": "0xc93e02e967712402c04f7a7d9675860698a58bdc4b048a4bc54b87bec41e4904"
+      "address": "0x6BC505692ebB58bAe3CaAE1B3a36054831C5d01f",
+      "deploymentTx": "0xa3dc4b689a01daf3feb62951e16499ed5e19a54d2cf45ed3167c8f98ffbd53de"
     }
   }
 }

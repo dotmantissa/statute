@@ -4,7 +4,7 @@ import { studioDevnet } from "genlayer-js/chains";
 
 const RPC = process.env.STUDIO_DEV_RPC || "https://studio-dev.genlayer.com/api";
 const STATUTE_ADDRESS = (process.env.NEXT_PUBLIC_STATUTE_ADDRESS ||
-  "0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e") as `0x${string}`;
+  "0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2") as `0x${string}`;
 
 export async function GET(
   req: NextRequest,

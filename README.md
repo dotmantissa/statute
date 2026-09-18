@@ -64,14 +64,29 @@ Every adjudication yields one of three consensus rulings:
 ### 4. Verifiable Expiry Windows
 Statutes change over time. Every verdict carries a strict expiration timestamp determined by the framework configuration (e.g. 30 days or 60 days). Once a verdict expires, `is_action_compliant(actionHash)` returns false until a renewed adjudication is rendered.
 
-### 5. On-chain Gating
-Any external smart contract on GenLayer or EVM can query Statute before executing state changes:
+### 5. On-chain Gating & Exact Payload Binding
+External smart contracts on GenLayer or EVM gate regulated actions using `execute_regulated_action(action_hash, action_payload)`. The consumer contract binds each execution to the exact payload and framework version it accepts:
 
-```solidity
-require(
-    IStatuteAdjudicator(statute).is_action_compliant(actionHash),
-    "Statute: Action not compliant or adjudication has expired"
-);
+```python
+# GenLayer Regulated Consumer Contract
+@gl.public.write
+def execute_regulated_action(self, action_hash: str, action_payload: str) -> bool:
+    adjudicator = gl.contract.get_at(self.statute_address)
+    status = adjudicator.view().get_verdict_status(action_hash)
+
+    # 1. Ensure verdict is compliant and unexpired
+    assert status.get("is_compliant") and not status.get("is_expired"), "Non-compliant or expired"
+
+    # 2. Strict Framework Version binding
+    assert status.get("framework_version") == self.accepted_framework_version, "Framework version mismatch"
+
+    # 3. Strict Action Payload binding - prevents approval reuse
+    approved_hash = status.get("payload_hash", "")
+    submitted_hash = adjudicator.view().compute_payload_hash(action_payload)
+    assert submitted_hash == approved_hash, "Payload mismatch: unrelated payload cannot reuse approval"
+
+    self.executed_actions[action_hash] = True
+    return True
 ```
 
 ---
@@ -82,12 +97,12 @@ The contracts are live on the GenLayer Studio Devnet (Chain ID `61997`, RPC `htt
 
 | Contract | Address | Network |
 | :--- | :--- | :--- |
-| **StatuteAdjudicator** | `0xa7F7e471d31c0f90A55A73D09CA06f0aD811D84e` | GenLayer Studio (61997) |
-| **RegulatedConsumer** | `0xd084F4f579FC9BCB12baf5fEcfF4bF356178AA10` | GenLayer Studio (61997) |
+| **StatuteAdjudicator** | `0xf94eef71c96D311ff7Ad0bd35873FD5A27ED57b2` | GenLayer Studio (61997) |
+| **RegulatedConsumer** | `0x6BC505692ebB58bAe3CaAE1B3a36054831C5d01f` | GenLayer Studio (61997) |
 
-Deployment transaction hash:
-- StatuteAdjudicator: `0x01d32bb1ea60c8f1da05c4c2454e919adf66c01546cd0ccd044cf703cfbee87b`
-- RegulatedConsumer: `0xc93e02e967712402c04f7a7d9675860698a58bdc4b048a4bc54b87bec41e4904`
+Deployment transaction hashes:
+- StatuteAdjudicator: `0x7449acd885c681385a0aba58592e0d81b20e05a90f9b9543b2e306235e3e6e81`
+- RegulatedConsumer: `0xa3dc4b689a01daf3feb62951e16499ed5e19a54d2cf45ed3167c8f98ffbd53de`
 
 Live Production Application:
 - Production dApp: [https://statute-protocol.vercel.app](https://statute-protocol.vercel.app)
@@ -194,10 +209,23 @@ PORT=4001
 ## Running Tests
 
 ### Contract Unit Tests
-Execute the direct mode GenVM test suite covering all 9 statutory adjudication test cases:
+Execute the direct mode GenVM test suite covering all 11 statutory adjudication and consumer gating test cases:
 ```bash
 npm run test:contracts
 ```
+
+The test suite in [`tests/direct/test_statute.py`](tests/direct/test_statute.py) includes:
+- `test_initial_frameworks_registered`: Verifies default statutory frameworks (SEC Reg D, EU MiCA, MAS DPT).
+- `test_register_new_framework`: Verifies authorized write route framework registration.
+- `test_update_framework_urls_increments_version`: Verifies framework updates increment version while preserving integrity.
+- `test_adjudicate_action_compliant`: Verifies compliant adjudication consensus.
+- `test_adjudicate_action_caution_with_conditions`: Verifies conditional caution consensus.
+- `test_adjudicate_action_non_compliant`: Verifies non-compliant adjudication rejection.
+- `test_verdict_expiration`: Verifies verdict validity window expires deterministically.
+- `test_unexpired_verdict_remains_valid_after_framework_url_update`: Verifies grandfathered verdicts remain valid during URL updates.
+- `test_cross_contract_regulated_consumer`: Verifies end-to-end `execute_regulated_action` flow on consumer contracts.
+- **`test_unrelated_payload_cannot_reuse_approval`**: **Directly verifies that an approval issued for a specific payload strictly rejects an unrelated or tampered payload attempting to reuse the approval.**
+- **`test_consumer_rejects_framework_version_mismatch`**: **Directly verifies that consumer contracts bound to framework version $V_n$ reject verdicts adjudicated under earlier or mismatched framework versions.**
 
 ### Contract Linter
 Verify GenVM SDK conventions and Python AST compatibility:
@@ -240,23 +268,47 @@ The web application will be available at `http://localhost:3000` and the API rel
 pragma solidity ^0.8.20;
 
 interface IStatuteAdjudicator {
-    function is_action_compliant(string calldata actionHash) external view returns (bool);
+    struct VerdictStatus {
+        bool exists;
+        bool is_compliant;
+        bool is_expired;
+        uint256 framework_version;
+        string framework_id;
+        string payload_hash;
+    }
+    function get_verdict_status(string calldata actionHash) external view returns (VerdictStatus memory);
+    function verify_action_payload(string calldata actionHash, string calldata actionPayload) external view returns (bool);
 }
 
-contract CompliantLaunchpad {
+contract RegulatedFund {
     address public immutable statute;
+    string public constant FRAMEWORK_ID = "sec-reg-d";
+    uint256 public constant ACCEPTED_FRAMEWORK_VERSION = 1;
+
+    mapping(string => bool) public executedActions;
+
+    event ActionExecuted(string indexed actionHash, string payload);
 
     constructor(address _statute) {
         statute = _statute;
     }
 
-    function launchTokenOffering(string calldata actionHash) external {
+    function execute_regulated_action(string calldata actionHash, string calldata actionPayload) external {
+        require(!executedActions[actionHash], "Action already executed");
+
+        IStatuteAdjudicator.VerdictStatus memory status = IStatuteAdjudicator(statute).get_verdict_status(actionHash);
+        require(status.exists && status.is_compliant && !status.is_expired, "Statute: Non-compliant or expired");
+        require(status.framework_version == ACCEPTED_FRAMEWORK_VERSION, "Statute: Framework version mismatch");
+        require(keccak256(bytes(status.framework_id)) == keccak256(bytes(FRAMEWORK_ID)), "Statute: Framework ID mismatch");
+
+        // Verify exact action payload binding (prevents approval reuse)
         require(
-            IStatuteAdjudicator(statute).is_action_compliant(actionHash),
-            "Statute: Offering has not received a valid compliant verdict"
+            IStatuteAdjudicator(statute).verify_action_payload(actionHash, actionPayload),
+            "Statute: Payload mismatch: unrelated payload cannot reuse approval"
         );
 
-        // Proceed with token distribution
+        executedActions[actionHash] = true;
+        emit ActionExecuted(actionHash, actionPayload);
     }
 }
 ```
@@ -267,17 +319,39 @@ contract CompliantLaunchpad {
 from genlayer import *
 
 @gl.contract
-class RegulatedFund:
-    statute: Address
+class RegulatedConsumer:
+    statute_address: Address
+    accepted_framework_version: u256
+    config: gl.storage.TreeMap[str, str]
+    executed_actions: gl.storage.TreeMap[str, bool]
 
-    def __init__(self, statute_address: Address):
-        self.statute = statute_address
+    def __init__(self, statute_contract: Address, framework_id: str = "sec-reg-d", accepted_framework_version: u256 = u256(1)):
+        self.statute_address = Address(str(statute_contract)) if not isinstance(statute_contract, Address) else statute_contract
+        self.accepted_framework_version = accepted_framework_version
+        self.config["framework_id"] = framework_id
 
     @gl.public.write
-    def allocate_capital(self, action_hash: str) -> bool:
-        adjudicator = gl.contract.get_at(self.statute)
-        if not adjudicator.view().is_action_compliant(action_hash):
-            raise Exception("Statute: Unauthorized action or expired compliance verdict")
+    def execute_regulated_action(self, action_hash: str, action_payload: str) -> bool:
+        assert not self.executed_actions.get(action_hash, False), "Action already executed"
+
+        adjudicator = gl.contract.get_at(self.statute_address)
+        status = adjudicator.view().get_verdict_status(action_hash)
+
+        # 1. Enforce compliant and unexpired
+        assert status.get("is_compliant") and not status.get("is_expired"), "Non-compliant or expired"
+
+        # 2. Enforce exact framework version binding
+        assert status.get("framework_version") == self.accepted_framework_version, "Framework version mismatch"
+        assert status.get("framework_id") == self.config["framework_id"], "Framework ID mismatch"
+
+        # 3. Enforce exact action payload binding (unrelated payload cannot reuse approval)
+        approved_hash = status.get("payload_hash", "")
+        submitted_hash = adjudicator.view().compute_payload_hash(action_payload)
+        assert approved_hash and (submitted_hash == approved_hash or action_payload == status.get("action_payload", "")), (
+            "Payload mismatch: submitted payload does not match approved verdict payload. An unrelated payload cannot reuse an approval."
+        )
+
+        self.executed_actions[action_hash] = True
         return True
 ```
 
