@@ -359,9 +359,10 @@ def test_cross_contract_regulated_consumer(direct_vm, direct_deploy, direct_alic
         desc,
         json.dumps(["US"]),
         json.dumps({}),
+        "payload-mint-1000",
     )
 
-    assert statute.is_action_compliant(action_hash) is True
+    expected_status = statute.get_verdict_status(action_hash)
 
     # 2. Reset known contract and deploy RegulatedConsumer
     import sys
@@ -376,9 +377,27 @@ def test_cross_contract_regulated_consumer(direct_vm, direct_deploy, direct_alic
     import genlayer.calldata as calldata
 
     def handle_cross_call(vm, req):
-        # When consumer queries statute.view().is_action_compliant(h)
-        # return encoded True with ResultCode.RETURN (0)
-        return bytes([0]) + calldata.encode(True)
+        call_info = req["CallContract"]["calldata"]
+        method = call_info[""]
+        args = call_info.get("args", [])
+        if method == "get_verdict_status":
+            h_arg = args[0]
+            if h_arg == action_hash:
+                return bytes([0]) + calldata.encode(expected_status)
+            else:
+                return bytes([0]) + calldata.encode({
+                    "exists": False,
+                    "action_hash": h_arg,
+                    "verdict": "UNADJUDICATED",
+                    "is_compliant": False,
+                    "is_expired": False,
+                    "framework_version": 0,
+                    "action_payload": "",
+                    "payload_hash": "",
+                })
+        elif method == "is_action_compliant":
+            return bytes([0]) + calldata.encode(args[0] == action_hash)
+        raise ValueError(f"Unexpected method: {method}")
 
     direct_vm._gl_call_hook = handle_cross_call
 
@@ -395,8 +414,173 @@ def test_cross_contract_regulated_consumer(direct_vm, direct_deploy, direct_alic
 
     # 5. Attempting to execute an unadjudicated action on consumer must revert
     def reject_hook(vm, req):
-        return bytes([0]) + calldata.encode(False)
+        return bytes([0]) + calldata.encode({
+            "exists": False,
+            "action_hash": "0xdeadbeef12345678",
+            "verdict": "UNADJUDICATED",
+            "is_compliant": False,
+            "is_expired": False,
+            "framework_version": 0,
+            "action_payload": "",
+            "payload_hash": "",
+        })
 
     direct_vm._gl_call_hook = reject_hook
-    with direct_vm.expect_revert("verification failed"):
+    with direct_vm.expect_revert("not found on Statute"):
         consumer.execute_regulated_action("0xdeadbeef12345678", "payload-unadjudicated")
+
+
+def test_unrelated_payload_cannot_reuse_approval(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """
+    CRITICAL SECURITY TEST:
+    Demonstrates that once an action receives an approved compliance verdict for a specific payload,
+    an attacker/caller CANNOT reuse that approval to execute an unrelated or malicious payload.
+    """
+    set_time(direct_vm, START_TIME)
+    direct_vm.sender = direct_alice
+    statute = direct_deploy("contracts/StatuteAdjudicator.py", 30)
+
+    action_id = "treasury-grant-kyc-007"
+    desc = "Community development grant restricted to verified non-profit ecosystem builder."
+    approved_payload = json.dumps({"recipient": "0xAlice123", "amount": 5000, "purpose": "grant"})
+    action_hash = statute.compute_action_hash(action_id, "sec-reg-d", desc)
+
+    # 1. Adjudicate as COMPLIANT on Statute with the specific approved_payload
+    direct_vm.mock_web(r".*", {"status": 200, "body": "SEC Reg D Rule 506 safe harbor guidance."})
+    mock_json_prompt(
+        direct_vm,
+        r".*",
+        {
+            "verdict": "COMPLIANT",
+            "confidence_score": 98,
+            "applicable_clauses": ["SEC Rule 506(c)"],
+            "conditions": [],
+            "reasoning": "Accredited recipient verification fully satisfied.",
+            "risk_factors": [],
+        },
+    )
+
+    verdict_id = statute.adjudicate_action(
+        action_id,
+        "sec-reg-d",
+        "Nonprofit Grant",
+        desc,
+        json.dumps(["US"]),
+        json.dumps({}),
+        approved_payload,
+    )
+    assert verdict_id.startswith("vrd_")
+
+    # Verify verdict status recorded the exact payload and payload hash
+    verdict_status = statute.get_verdict_status(action_hash)
+    assert verdict_status["is_compliant"] is True
+    assert verdict_status["action_payload"] == approved_payload
+    expected_payload_hash = statute.compute_payload_hash(approved_payload)
+    assert verdict_status["payload_hash"] == expected_payload_hash
+
+    # Verify Statute view function verify_action_payload
+    assert statute.verify_action_payload(action_hash, approved_payload, 1) is True
+    assert statute.verify_action_payload(action_hash, "unrelated-payload", 1) is False
+    assert statute.verify_action_payload(action_hash, approved_payload, 2) is False  # wrong version
+
+    # 2. Deploy RegulatedConsumer accepting sec-reg-d version 1
+    import sys
+    if "genlayer.contract" in sys.modules:
+        setattr(sys.modules["genlayer.contract"], "__known_contract__", None)
+
+    statute_addr = statute.address
+    consumer = direct_deploy("contracts/RegulatedConsumer.py", statute_addr, "sec-reg-d", 1)
+    assert consumer.get_accepted_framework() == {"framework_id": "sec-reg-d", "version": 1}
+
+    # Hook cross-contract query to statute
+    import genlayer.calldata as calldata
+
+    def cross_call_hook(vm, req):
+        call_info = req["CallContract"]["calldata"]
+        method = call_info[""]
+        args = call_info.get("args", [])
+        if method == "get_verdict_status":
+            if args[0] == action_hash:
+                return bytes([0]) + calldata.encode(verdict_status)
+            return bytes([0]) + calldata.encode({"exists": False, "is_compliant": False})
+        raise ValueError(f"Unexpected method: {method}")
+
+    direct_vm._gl_call_hook = cross_call_hook
+
+    # 3. ATTACK ATTEMPT: Attacker attempts to reuse the valid action_hash with an UNRELATED payload!
+    direct_vm.sender = direct_bob
+    malicious_payload = json.dumps({"recipient": "0xAttacker666", "amount": 1000000, "purpose": "drain"})
+
+    with direct_vm.expect_revert("Payload mismatch: submitted payload does not match approved verdict payload. An unrelated payload cannot reuse an approval."):
+        consumer.execute_regulated_action(action_hash, malicious_payload)
+
+    # Verify no execution took place
+    assert consumer.is_action_executed(action_hash) is False
+    assert consumer.get_total_executed() == 0
+
+    # 4. ATTACK ATTEMPT: Attacker attempts a subtle 1-character tamper
+    tampered_payload = json.dumps({"recipient": "0xAlice123", "amount": 5001, "purpose": "grant"})
+    with direct_vm.expect_revert("Payload mismatch"):
+        consumer.execute_regulated_action(action_hash, tampered_payload)
+
+    assert consumer.is_action_executed(action_hash) is False
+    assert consumer.get_total_executed() == 0
+
+    # 5. LEGITIMATE EXECUTION: Submitting the EXACT approved payload succeeds!
+    res = consumer.execute_regulated_action(action_hash, approved_payload)
+    assert res is True
+    assert consumer.is_action_executed(action_hash) is True
+    assert consumer.get_total_executed() == 1
+
+    # 6. REPLAY PREVENTION: Same approval cannot be executed a second time
+    with direct_vm.expect_revert("already been executed"):
+        consumer.execute_regulated_action(action_hash, approved_payload)
+
+
+def test_consumer_rejects_framework_version_mismatch(direct_vm, direct_deploy, direct_alice):
+    """
+    Demonstrates that consumer strictly binds execution to the accepted framework version.
+    If a verdict was adjudicated under framework version 1, but the consumer accepts version 2,
+    execution MUST revert.
+    """
+    set_time(direct_vm, START_TIME)
+    direct_vm.sender = direct_alice
+    statute = direct_deploy("contracts/StatuteAdjudicator.py", 30)
+
+    action_id = "v1-approval"
+    desc = "Action approved under version 1 of regulation."
+    payload = "payload-version-test"
+    action_hash = statute.compute_action_hash(action_id, "sec-reg-d", desc)
+
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Regulation text."})
+    mock_json_prompt(
+        direct_vm,
+        r".*",
+        {"verdict": "COMPLIANT", "confidence_score": 90, "applicable_clauses": ["Rule 506"], "conditions": [], "reasoning": "OK", "risk_factors": []},
+    )
+    statute.adjudicate_action(action_id, "sec-reg-d", "Title", desc, json.dumps(["US"]), json.dumps({}), payload)
+    verdict_status = statute.get_verdict_status(action_hash)
+    assert verdict_status["framework_version"] == 1
+
+    # Consumer accepts framework version 2
+    import sys
+    if "genlayer.contract" in sys.modules:
+        setattr(sys.modules["genlayer.contract"], "__known_contract__", None)
+
+    statute_addr = statute.address
+    consumer = direct_deploy("contracts/RegulatedConsumer.py", statute_addr, "sec-reg-d", 2)
+    assert consumer.get_accepted_framework()["version"] == 2
+
+    import genlayer.calldata as calldata
+
+    def cross_call_hook(vm, req):
+        return bytes([0]) + calldata.encode(verdict_status)
+
+    direct_vm._gl_call_hook = cross_call_hook
+
+    # Must revert due to framework version mismatch!
+    with direct_vm.expect_revert("Framework version mismatch: verdict has version 1, consumer accepts version 2"):
+        consumer.execute_regulated_action(action_hash, payload)
+
+    assert consumer.is_action_executed(action_hash) is False
+
